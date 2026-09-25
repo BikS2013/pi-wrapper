@@ -28,6 +28,7 @@ async function run(): Promise<void> {
   try {
     const html = await (await fetch(base + "/")).text();
     assert.match(html, /<textarea id="input"/);
+    assert.match(html, /<div id="toolstrip"/);
     console.log("✓ web page served");
 
     // 3. SSE stream: collect events.

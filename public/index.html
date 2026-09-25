@@ -58,7 +58,11 @@
   .block .b-sub { font-size: 11px; color: var(--muted); margin: 4px 0 2px; text-transform: uppercase; letter-spacing: .4px; }
   .block .b-sub:first-child { margin-top: 0; }
   .block .b-call { color: #c792ea; font-size: 13px; margin-top: 4px; }
-  footer { border-top: 1px solid var(--border); background: var(--panel); padding: 10px 14px; display: flex; gap: 8px; align-items: flex-end; }
+  #toolstrip { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); background: #141720; padding: 6px 14px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; min-height: 34px; }
+  #toolstrip:empty::before { content: "No tools used yet"; color: var(--muted); font-size: 12px; }
+  .tool-chip { border: 1px solid var(--border); border-radius: 999px; background: var(--panel2); color: var(--muted); padding: 3px 9px; font-size: 12px; line-height: 1.2; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: border-color .15s, background .15s, color .15s, box-shadow .15s; }
+  .tool-chip.active { background: color-mix(in srgb, #c792ea 24%, var(--panel2)); border-color: #c792ea; color: var(--text); box-shadow: 0 0 0 2px #c792ea33; }
+  footer { background: var(--panel); padding: 10px 14px; display: flex; gap: 8px; align-items: flex-end; }
   footer textarea { flex: 1; resize: vertical; min-height: 44px; max-height: 40vh; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 8px; font: 14px/1.4 ui-monospace, Menlo, monospace; }
   footer textarea:focus { outline: none; border-color: var(--accent); }
   footer .col { display: flex; flex-direction: column; gap: 6px; }
@@ -93,6 +97,7 @@
 <div id="statusbar"></div>
 <div id="widgets"></div>
 <main id="feed"></main>
+<div id="toolstrip" aria-label="Tools used by the agent"></div>
 <footer>
   <textarea id="input" placeholder="Message pi…  (Enter = send, Shift+Enter = newline, !cmd = run bash, !!cmd = bash excluded from context, /name = command/skill/template)"></textarea>
   <div class="col">
@@ -110,7 +115,7 @@
 (() => {
   const $ = (id) => document.getElementById(id);
   const feed = $("feed");
-  const state = { streaming: false, messages: new Map(), tools: new Map(), bash: new Map(), currentAssistant: null, statuses: new Map(), widgets: new Map(), resolvedDialogs: new Set(), dialogQueue: [], openDialog: null };
+  const state = { streaming: false, messages: new Map(), tools: new Map(), toolChips: new Map(), toolActiveCounts: new Map(), bash: new Map(), currentAssistant: null, statuses: new Map(), widgets: new Map(), resolvedDialogs: new Set(), dialogQueue: [], openDialog: null };
 
   // ---------- helpers ----------
   function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
@@ -181,12 +186,34 @@
   function valuePre(v, text) { v.textContent = ""; const pre = el("pre", null, text); v.append(pre); return pre; }
 
   // ---- Tool Invocation ----
+  function setToolActive(toolName, active) {
+    if (!toolName) return;
+    let chip = state.toolChips.get(toolName);
+    if (!chip) {
+      chip = el("span", "tool-chip", toolName);
+      chip.title = toolName;
+      state.toolChips.set(toolName, chip);
+      $("toolstrip").append(chip);
+    }
+    const count = (state.toolActiveCounts.get(toolName) || 0) + (active ? 1 : -1);
+    if (count > 0) { state.toolActiveCounts.set(toolName, count); chip.classList.add("active"); }
+    else { state.toolActiveCounts.delete(toolName); chip.classList.remove("active"); }
+  }
+  function clearActiveTools() {
+    state.toolActiveCounts.clear();
+    for (const chip of state.toolChips.values()) chip.classList.remove("active");
+  }
+  function resetToolStrip() {
+    state.toolChips.clear(); state.toolActiveCounts.clear(); $("toolstrip").textContent = "";
+  }
   function toolStart(r, ts) {
+    setToolActive(r.toolName, true);
     const b = makeBlock("tool", "Tool Invocation", ts);
     b.field("Tool Name").append(el("span", "name", r.toolName));
     valuePre(b.field("Input Data"), JSON.stringify(r.args ?? {}, null, 2));
     b.field("Result").append(el("span", "hint", "(waiting…)"));
     b.field("Execution Time"); b.startTimer();
+    b.toolName = r.toolName;
     add(b.node); state.tools.set(r.toolCallId, b);
     return b;
   }
@@ -254,7 +281,7 @@
   }
   function interruptOpenBlocks(ts) {
     for (const [, b] of state.tools) { b.fields["Result"].textContent = "(interrupted — no result received)"; b.finish(ts, "err", "interrupted"); }
-    state.tools.clear();
+    state.tools.clear(); clearActiveTools();
     if (state.currentAssistant) { state.currentAssistant.finish(ts, "err", "interrupted"); state.currentAssistant = null; }
   }
 
@@ -309,6 +336,7 @@
         valuePre(b.fields["Result"], resultText(r.result) || "(no output)");
         b.finish(ts, r.isError ? "err" : "ok", r.isError ? "error" : "success");
         state.tools.delete(r.toolCallId);
+        setToolActive(b.toolName || r.toolName, false);
         return;
       }
       case "bash_execution_update": {
@@ -423,7 +451,7 @@
     const es = new EventSource("/events");
     es.addEventListener("replay", (e) => {
       const data = JSON.parse(e.data);
-      feed.textContent = ""; state.currentAssistant = null; state.tools.clear(); timers.clear(); llm.inputs = []; llm.pendingStart = null; state.bash.clear(); state.statuses.clear(); state.widgets.clear(); state.dialogQueue = [];
+      feed.textContent = ""; state.currentAssistant = null; state.tools.clear(); timers.clear(); resetToolStrip(); llm.inputs = []; llm.pendingStart = null; state.bash.clear(); state.statuses.clear(); state.widgets.clear(); state.dialogQueue = [];
       replaying = true;
       for (const env of data.events) { try { handle(env); } catch (err) { console.error(err, env); } }
       replaying = false;

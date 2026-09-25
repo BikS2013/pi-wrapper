@@ -27,6 +27,7 @@ Node HTTP server (src/server.ts)
 
 ## UI blocks (public/index.html)
 
+- **Tool strip.** A compact stripe above the command input lists every unique agent tool observed in `tool_execution_start` / `tool_execution_end` events. A tool chip is highlighted while one or more invocations of that tool are currently running, and remains in the strip after completion.
 - **Tool Invocation.** Opened by `tool_execution_start` (with `toolName` and `args`), filled live by `tool_execution_update`, and closed by `tool_execution_end` (with `result` and `isError`). Execution Time = end ts − start ts.
 - **LLM Call.** One block per assistant message. *Message* holds the inputs added to the context since the previous call: `message_end` records of role `user`, `toolResult`, `custom` or `bashExecution`. So the first call of a run shows the user prompt, and follow-up calls show the tool results. *Response* streams from `message_update` deltas and is replaced by the authoritative `message_end` content. The start time is the later of `turn_start` and the last input `message_end`, so Execution Time includes time-to-first-token. It ends at the assistant `message_end`.
 - **Timestamps.** All times use the server's receive timestamps (`envelope.ts`), so replayed history shows the same durations.

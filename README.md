@@ -4,6 +4,7 @@ A Node.js server that runs the [pi](https://github.com/earendil-works/pi) coding
 
 - streams **every notification** from the running pi session live: assistant text and thinking, tool calls and results, extension `notify` messages, status/widget updates, retries, compaction, queue changes, errors, and pi's stderr
 - provides a **text box** for sending commands to pi
+- keeps a compact **tool strip** above the text box with every agent tool used in the session; the matching tool chip is highlighted while that tool is running
 - shows a **Tool Invocation** block for every tool call: Tool Name, Input Data, Result, Execution Time (live timer while running)
 - shows an **LLM Call** block for every model request: Message (the new input for that call: your prompt, or the tool results fed back), Response (text, thinking, tool calls), Execution Time, Tokens, Model
 - answers extension dialogs (`select` / `confirm` / `input` / `editor`) in a modal
