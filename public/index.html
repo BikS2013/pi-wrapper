@@ -26,10 +26,13 @@
   #statusbar:empty { display: none; }
   #widgets:empty { display: none; }
   #widgets { padding: 6px 14px; border-bottom: 1px solid var(--border); font: 12px/1.4 ui-monospace, Menlo, monospace; white-space: pre-wrap; color: var(--muted); }
-  main { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+  /* Feed = normal block flow (NOT flexbox): entries always keep their natural height and
+     the feed scrolls; new entries append at the bottom and older ones scroll upwards. */
+  main { flex: 1 1 0; min-height: 0; overflow-y: auto; padding: 14px; display: block; }
+  #feed > * { margin: 0 0 8px; }
   .item { border: 1px solid var(--border); border-radius: 8px; background: var(--panel); padding: 8px 10px; max-width: 100%; }
   .item .meta { font-size: 11px; color: var(--muted); margin-bottom: 4px; display: flex; gap: 8px; }
-  .item.user { background: var(--user); align-self: flex-end; max-width: 80%; }
+  .item.user { background: var(--user); width: fit-content; max-width: 80%; margin-left: auto !important; }
   .item.sys { background: transparent; border: none; padding: 0 4px; color: var(--muted); font-size: 12px; }
   .item.notify-info { border-left: 3px solid var(--accent); }
   .item.notify-warning { border-left: 3px solid var(--warn); }
@@ -41,9 +44,6 @@
   .tool .name { color: var(--accent); font-weight: 600; }
   .tool.ok .state { color: var(--ok); } .tool.fail .state { color: var(--err); } .tool.run .state { color: var(--warn); }
   /* Structured blocks: Tool Invocation / LLM Call */
-  /* #feed is a flex column: its children must never shrink, otherwise once the feed
-     overflows the viewport, items with overflow:hidden (min-height 0) collapse to 2px. */
-  #feed > * { flex-shrink: 0; }
   .block { border: 1px solid var(--border); border-radius: 8px; background: var(--panel); overflow: hidden; }
   .block.b-tool { border-left: 4px solid #c792ea; }
   .block.b-llm { border-left: 4px solid var(--accent); }

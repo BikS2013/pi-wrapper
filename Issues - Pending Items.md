@@ -10,7 +10,7 @@
 
 - **Answers invisible: every block collapsed to a thin line** (2025-09-25).
   - *Cause:* `#feed` is a `display:flex; flex-direction:column` scroll container, and flex items may shrink by default. The LLM Call and Tool Invocation blocks use `overflow:hidden`, which makes their automatic minimum height 0. Once the conversation grew taller than the window, the browser shrank each block to its 2px border. The earlier verification used a 2600px-tall viewport where everything fit, so it didn't catch this.
-  - *Fix:* `#feed > * { flex-shrink: 0; }` in `public/index.html`. Verified against the live session at 1560×890: block heights are 200–770px and there is no horizontal overflow.
+  - *Fix:* first `#feed > * { flex-shrink: 0; }`, then made structural: `#feed` is now a plain block-flow container (no flexbox), so entries cannot be compressed. They keep their natural height, and the feed scrolls upwards as new entries arrive. Verified against the live session at 1560×890 and 1560×700: no entry is at or below 4px, the feed scrolls (5,844px of content in a 497px viewport), and there is no horizontal overflow.
   - *Lesson:* verify UI changes with a realistic viewport size and a feed that overflows it.
 
 - **"I don't see any tool stripe" — stale browser tab** (2025-09-25).

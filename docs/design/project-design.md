@@ -57,7 +57,7 @@ Node HTTP server (src/server.ts)
   - **Response:** streams from `message_update` deltas and is replaced by the authoritative `message_end` content (text, thinking, tool calls with arguments, or the error).
   - **Execution Time:** starts at the later of `turn_start` and the last input `message_end`, so it includes time-to-first-token. It ends at the assistant `message_end`.
   - **Extra fields:** Tokens (in, cache read, out, cost) and Model.
-- **Feed layout.** `#feed` is a flex column scroll container, and all of its children are `flex-shrink: 0`. Without this, overflowing feeds collapse blocks that use `overflow:hidden` down to their borders.
+- **Feed layout.** `#feed` is a plain block-flow scroll container, deliberately not flexbox. Entries always keep their natural height, new entries append at the bottom, and older ones scroll upwards. Autoscroll keeps the view pinned to the bottom while you are at the bottom. User bubbles are right-aligned with `margin-left:auto`.
 - **Timestamps.** All times use the server's receive timestamps (`envelope.ts`), so replayed history shows the same durations.
 - **Unfinished blocks.** If pi settles or exits while a block is still open, the block is marked "interrupted".
 
