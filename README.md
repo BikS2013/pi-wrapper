@@ -21,7 +21,7 @@ cp .env.example .env      # then edit PI_WRAPPER_CWD etc.
 npm start                 # → http://127.0.0.1:4321
 ```
 
-Restart the server after changing `.env`, `src/` or `pi-extension/`. Changes to `public/index.html` only need a browser refresh, because the page is read from disk on every request.
+Restart the server after changing `.env`, `src/` or `pi-extension/`. Changes to `public/index.html` only need a browser refresh, because the page is read from disk on every request. An open tab reconnects by itself after a server restart. If the page on disk changed since the tab loaded it, the tab reloads itself so it never runs stale UI code (this works from the first reload after this feature was added).
 
 ## Configuration (all required unless noted — no defaults)
 
@@ -67,7 +67,7 @@ Enter sends the message. Shift+Enter inserts a newline.
 | Method & path | Body | Description |
 |---|---|---|
 | `GET /` | – | Web page |
-| `GET /events` | – | SSE stream. The first `replay` event holds `{events, isStreaming, tools}`; each later message is `{seq, ts, record}` |
+| `GET /events` | – | SSE stream. The first `replay` event holds `{events, isStreaming, tools, pageVersion}`; each later message is `{seq, ts, record}` |
 | `GET /api/status` | – | `{running, isStreaming, pendingDialogs}` |
 | `POST /api/command` | `{text, behavior?: "steer"\|"followUp"}` | Text-box command (see syntax above) |
 | `POST /api/rpc` | any pi RPC command, e.g. `{"type":"set_model",...}` | Raw pass-through; returns pi's `response` |

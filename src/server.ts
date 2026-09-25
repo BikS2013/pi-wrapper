@@ -2,7 +2,7 @@
 // to a web page (Server-Sent Events) and accepts commands from that page.
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { loadConfig, ConfigError, type WrapperConfig } from "./config.ts";
@@ -23,6 +23,12 @@ const MAX_BODY_BYTES = 1024 * 1024;
 const DIALOG_METHODS = new Set(["select", "confirm", "input", "editor"]);
 // Per-command response timeouts (ms). Long-running commands get generous limits.
 const LONG_COMMANDS = new Set(["bash", "compact", "abort", "export_html", "new_session", "switch_session", "fork", "clone"]);
+
+/** Version of the page currently on disk; the page reloads itself when this changes on reconnect. */
+function pageVersion(): string {
+  const st = statSync(join(PUBLIC_DIR, "index.html"));
+  return `${st.mtimeMs}-${st.size}`;
+}
 
 function commandTimeout(type: string): number {
   return LONG_COMMANDS.has(type) ? 30 * 60_000 : 60_000;
@@ -78,7 +84,7 @@ class Hub {
       Connection: "keep-alive",
     });
     const replay = [...this.history, ...this.inflight].sort((a, b) => a.seq - b.seq);
-    res.write(`event: replay\ndata: ${JSON.stringify({ events: replay, isStreaming: this.isStreaming, tools: this.tools })}\n\n`);
+    res.write(`event: replay\ndata: ${JSON.stringify({ events: replay, isStreaming: this.isStreaming, tools: this.tools, pageVersion: pageVersion() })}\n\n`);
     this.clients.add(res);
     res.on("close", () => this.clients.delete(res));
   }

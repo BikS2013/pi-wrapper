@@ -41,6 +41,9 @@
   .tool .name { color: var(--accent); font-weight: 600; }
   .tool.ok .state { color: var(--ok); } .tool.fail .state { color: var(--err); } .tool.run .state { color: var(--warn); }
   /* Structured blocks: Tool Invocation / LLM Call */
+  /* #feed is a flex column: its children must never shrink, otherwise once the feed
+     overflows the viewport, items with overflow:hidden (min-height 0) collapse to 2px. */
+  #feed > * { flex-shrink: 0; }
   .block { border: 1px solid var(--border); border-radius: 8px; background: var(--panel); overflow: hidden; }
   .block.b-tool { border-left: 4px solid #c792ea; }
   .block.b-llm { border-left: 4px solid var(--accent); }
@@ -474,10 +477,15 @@
 
   // ---------- server connection ----------
   let replaying = false;
+  let loadedPageVersion = null;
   function connect() {
     const es = new EventSource("/events");
     es.addEventListener("replay", (e) => {
       const data = JSON.parse(e.data);
+      // A long-lived tab silently reconnects after a server restart; if the page on the
+      // server has changed since this tab loaded it, reload so the new UI code is used.
+      if (loadedPageVersion && data.pageVersion && data.pageVersion !== loadedPageVersion) { es.close(); location.reload(); return; }
+      loadedPageVersion = data.pageVersion;
       feed.textContent = ""; state.currentAssistant = null; state.tools.clear(); timers.clear(); resetToolStrip(); renderToolRegistry(data.tools); llm.inputs = []; llm.pendingStart = null; state.bash.clear(); state.statuses.clear(); state.widgets.clear(); state.dialogQueue = [];
       replaying = true;
       for (const env of data.events) { try { handle(env); } catch (err) { console.error(err, env); } }

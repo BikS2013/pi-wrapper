@@ -8,6 +8,15 @@
 
 ## Completed
 
+- **Answers invisible: every block collapsed to a thin line** (2025-09-25).
+  - *Cause:* `#feed` is a `display:flex; flex-direction:column` scroll container, and flex items may shrink by default. The LLM Call and Tool Invocation blocks use `overflow:hidden`, which makes their automatic minimum height 0. Once the conversation grew taller than the window, the browser shrank each block to its 2px border. The earlier verification used a 2600px-tall viewport where everything fit, so it didn't catch this.
+  - *Fix:* `#feed > * { flex-shrink: 0; }` in `public/index.html`. Verified against the live session at 1560×890: block heights are 200–770px and there is no horizontal overflow.
+  - *Lesson:* verify UI changes with a realistic viewport size and a feed that overflows it.
+
+- **"I don't see any tool stripe" — stale browser tab** (2025-09-25).
+  - *Cause:* the tab had been opened with the first version of the page. After the server restart, `EventSource` reconnected automatically without reloading the page. The old JavaScript then rendered the new events: old tool cards and no stripe. Server and disk were current.
+  - *Fix:* a hard reload fixes it right away. To prevent it recurring, the server now sends `pageVersion` in every SSE `replay`, and the page reloads itself when the version differs from the one it loaded (`src/server.ts` `pageVersion()`, `public/index.html` `loadedPageVersion`).
+
 - **Two parallel tool-strip implementations (consistency)** (2025-09-25).
   - *Issue:* another session had added a `#toolstrip` that showed only the tools *used so far*. The request is that *every* tool is represented.
   - *Fix:* merged into one implementation. The existing `#toolstrip` / `.tool-chip` markup and the per-tool active counter were kept. Chips are now pre-built from the full registry published by the new bridge extension, inactive tools are dimmed, and the "on" state is a solid fill with a glow. No duplicate code remains.

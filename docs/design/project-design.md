@@ -38,6 +38,7 @@ Node HTTP server (src/server.ts)
 - **Strict LF framing** is done with `StringDecoder`, not `readline`, because `readline` also splits on U+2028/U+2029 (pi docs requirement).
 - **Uses SSE instead of WebSocket.** Events only flow server→client, and commands are plain POSTs. This needs no dependencies.
 - **Replay:** new or reconnecting pages receive the history. High-volume delta records (`message_update`, `tool_execution_update`, `bash_execution_update`) are kept only while their message is in flight. The authoritative `message_end` / `tool_execution_end` records are kept. The latest tool registry is kept separately, so history truncation cannot drop it.
+- **Stale-tab protection:** each `replay` carries `pageVersion` (the mtime and size of `public/index.html`). A tab remembers the version it was loaded with. If a later replay, after an SSE auto-reconnect, reports a different version, the tab reloads. Otherwise a long-lived tab would keep rendering new events with old UI code.
 - **Busy handling:** the server tracks `agent_start` → `agent_settled`. While pi is busy, a prompt must carry `steer` or `followUp`. The UI sends the value of its selector.
 - **Extension dialogs:** they are broadcast to all tabs. The first answer wins (other tabs close the dialog when they get `ui_resolved`), and late answers get HTTP 409.
 - **Configuration:** every setting is required, with no fallbacks. `PI_WRAPPER_PI_ENV` exists so provider env vars can be corrected for pi only, without touching the user's shell (see the Azure issue in `Issues - Pending Items.md`).
@@ -56,6 +57,7 @@ Node HTTP server (src/server.ts)
   - **Response:** streams from `message_update` deltas and is replaced by the authoritative `message_end` content (text, thinking, tool calls with arguments, or the error).
   - **Execution Time:** starts at the later of `turn_start` and the last input `message_end`, so it includes time-to-first-token. It ends at the assistant `message_end`.
   - **Extra fields:** Tokens (in, cache read, out, cost) and Model.
+- **Feed layout.** `#feed` is a flex column scroll container, and all of its children are `flex-shrink: 0`. Without this, overflowing feeds collapse blocks that use `overflow:hidden` down to their borders.
 - **Timestamps.** All times use the server's receive timestamps (`envelope.ts`), so replayed history shows the same durations.
 - **Unfinished blocks.** If pi settles or exits while a block is still open, the block is marked "interrupted".
 
