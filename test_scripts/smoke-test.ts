@@ -57,6 +57,12 @@ async function run(): Promise<void> {
     await waitFor((e) => e.record.type === "wrapper" && e.record.event === "started");
     console.log("✓ pi started, SSE replay received");
 
+    // 3b. Tool registry published by the bridge extension (drives the tools stripe).
+    const toolsEv = await waitFor((e) => e.record.type === "wrapper" && e.record.event === "tools");
+    assert.ok(Array.isArray(toolsEv.record.tools) && toolsEv.record.tools.some((t: any) => t.name === "bash"));
+    assert.ok(!events.some((e) => e.record.type === "extension_ui_request" && e.record.statusKey === "pi-wrapper:tools"), "bridge channel must not leak to clients");
+    console.log(`✓ tool registry received (${toolsEv.record.tools.length} tools, ${toolsEv.record.active.length} active)`);
+
     // 4. RPC pass-through.
     const st = await (await fetch(base + "/api/rpc", { method: "POST", body: JSON.stringify({ type: "get_state" }) })).json();
     assert.equal(st.success, true);

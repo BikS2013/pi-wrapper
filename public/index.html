@@ -59,9 +59,12 @@
   .block .b-sub:first-child { margin-top: 0; }
   .block .b-call { color: #c792ea; font-size: 13px; margin-top: 4px; }
   #toolstrip { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); background: #141720; padding: 6px 14px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; min-height: 34px; }
-  #toolstrip:empty::before { content: "No tools used yet"; color: var(--muted); font-size: 12px; }
+  #toolstrip:empty::before { content: "waiting for pi to report its tools…"; color: var(--muted); font-size: 12px; }
+  #toolstrip .ts-label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-right: 2px; }
+  .tool-chip.inactive { opacity: .45; border-style: dashed; }
+  .tool-chip.inactive.active { opacity: 1; }
   .tool-chip { border: 1px solid var(--border); border-radius: 999px; background: var(--panel2); color: var(--muted); padding: 3px 9px; font-size: 12px; line-height: 1.2; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: border-color .15s, background .15s, color .15s, box-shadow .15s; }
-  .tool-chip.active { background: color-mix(in srgb, #c792ea 24%, var(--panel2)); border-color: #c792ea; color: var(--text); box-shadow: 0 0 0 2px #c792ea33; }
+  .tool-chip.active { background: #c792ea; border-color: #c792ea; color: #14101c; font-weight: 700; box-shadow: 0 0 10px #c792eaaa; }
   footer { background: var(--panel); padding: 10px 14px; display: flex; gap: 8px; align-items: flex-end; }
   footer textarea { flex: 1; resize: vertical; min-height: 44px; max-height: 40vh; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 8px; font: 14px/1.4 ui-monospace, Menlo, monospace; }
   footer textarea:focus { outline: none; border-color: var(--accent); }
@@ -97,7 +100,7 @@
 <div id="statusbar"></div>
 <div id="widgets"></div>
 <main id="feed"></main>
-<div id="toolstrip" aria-label="Tools used by the agent"></div>
+<div id="toolstrip" aria-label="pi tools (lit while executing)"></div>
 <footer>
   <textarea id="input" placeholder="Message pi…  (Enter = send, Shift+Enter = newline, !cmd = run bash, !!cmd = bash excluded from context, /name = command/skill/template)"></textarea>
   <div class="col">
@@ -186,15 +189,38 @@
   function valuePre(v, text) { v.textContent = ""; const pre = el("pre", null, text); v.append(pre); return pre; }
 
   // ---- Tool Invocation ----
-  function setToolActive(toolName, active) {
-    if (!toolName) return;
+  // Tools stripe: one chip per pi tool. The full registry comes from the bridge extension
+  // (wrapper "tools" event / replay snapshot); a chip is lit ("active") while at least one
+  // execution of that tool is running (tool_execution_start .. tool_execution_end).
+  function ensureToolChip(toolName) {
     let chip = state.toolChips.get(toolName);
     if (!chip) {
+      const strip = $("toolstrip");
+      if (!strip.childNodes.length) strip.append(el("span", "ts-label", "tools"));
       chip = el("span", "tool-chip", toolName);
       chip.title = toolName;
       state.toolChips.set(toolName, chip);
-      $("toolstrip").append(chip);
+      strip.append(chip);
     }
+    return chip;
+  }
+  function renderToolRegistry(reg) {
+    if (!reg) return;
+    const active = new Set(reg.active || []);
+    state.toolChips.clear(); $("toolstrip").textContent = "";
+    for (const t of reg.tools || []) {
+      const chip = ensureToolChip(t.name);
+      const isActive = active.has(t.name);
+      chip.classList.toggle("inactive", !isActive);
+      chip.classList.toggle("active", (state.toolActiveCounts.get(t.name) || 0) > 0);
+      chip.title = `${t.name}${isActive ? "" : " (inactive)"}${t.source ? " · " + t.source : ""}${t.description ? "\n\n" + t.description : ""}`;
+    }
+    // Keep chips for tools currently running but absent from the registry.
+    for (const [name, n] of state.toolActiveCounts) if (n > 0) ensureToolChip(name).classList.add("active");
+  }
+  function setToolActive(toolName, active) {
+    if (!toolName) return;
+    const chip = ensureToolChip(toolName);
     const count = (state.toolActiveCounts.get(toolName) || 0) + (active ? 1 : -1);
     if (count > 0) { state.toolActiveCounts.set(toolName, count); chip.classList.add("active"); }
     else { state.toolActiveCounts.delete(toolName); chip.classList.remove("active"); }
@@ -368,6 +394,7 @@
       case "exited": setProc(false, "stopped"); setRun(false); interruptOpenBlocks(ts); return sys(`pi exited (code ${r.code}${r.signal ? ", signal " + r.signal : ""})`, ts, "error");
       case "stderr": { const n = el("div", "item sys"); n.dataset.lifecycle = "1"; n.append(el("pre", null, r.text)); applyVisibility(n); return add(n); }
       case "user_command": if (r.command === "bash") { const n = el("div", "item user"); n.append(el("div", "text", r.text)); add(n, ts, "you · bash"); scroll(true); } else if (r.behavior) sys(`queued as ${r.behavior}: ${r.text}`, ts); return;
+      case "tools": renderToolRegistry(r); return;
       case "ui_resolved": state.resolvedDialogs.add(r.id); if (state.openDialog === r.id) closeDialog(); state.dialogQueue = state.dialogQueue.filter((d) => d.id !== r.id); return;
     }
   }
@@ -451,7 +478,7 @@
     const es = new EventSource("/events");
     es.addEventListener("replay", (e) => {
       const data = JSON.parse(e.data);
-      feed.textContent = ""; state.currentAssistant = null; state.tools.clear(); timers.clear(); resetToolStrip(); llm.inputs = []; llm.pendingStart = null; state.bash.clear(); state.statuses.clear(); state.widgets.clear(); state.dialogQueue = [];
+      feed.textContent = ""; state.currentAssistant = null; state.tools.clear(); timers.clear(); resetToolStrip(); renderToolRegistry(data.tools); llm.inputs = []; llm.pendingStart = null; state.bash.clear(); state.statuses.clear(); state.widgets.clear(); state.dialogQueue = [];
       replaying = true;
       for (const env of data.events) { try { handle(env); } catch (err) { console.error(err, env); } }
       replaying = false;

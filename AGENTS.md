@@ -46,13 +46,14 @@
 
 Node.js (>= 22.18, native TypeScript type-stripping, zero runtime dependencies) web wrapper around the pi coding agent.
 
-- `src/server.ts` — HTTP server: serves the page, SSE `/events`, command endpoints.
-- `src/pi-process.ts` — spawns `pi --mode rpc`, strict LF JSONL framing, request/response correlation.
-- `src/config.ts` — required configuration (no fallbacks).
-- `public/index.html` — single-page UI (notifications feed + command box).
+- `src/server.ts` — HTTP server: serves the page, SSE `/events`, command endpoints, and the tool-registry interceptor.
+- `src/pi-process.ts` — spawns `pi --mode rpc -e pi-extension/wrapper-bridge.ts …`, strict LF JSONL framing, request/response correlation, pi-only env overrides.
+- `src/config.ts` — required configuration (no fallbacks); optional `PI_WRAPPER_PI_ARGS` / `PI_WRAPPER_PI_ENV`.
+- `pi-extension/wrapper-bridge.ts` — pi extension that publishes the tool registry (RPC has no tool-list command).
+- `public/index.html` — single-page UI: notifications feed, LLM Call / Tool Invocation blocks, tools stripe, command box.
 - `test_scripts/smoke-test.ts` — end-to-end smoke test (`npm test`).
 
-See `docs/design/project-design.md` for the architecture and `README.md` for usage.
+See `docs/design/project-design.md` (architecture), `docs/design/project-functions.md` (feature registry), and `README.md` (usage, configuration, HTTP API).
 
 ## Tools
 

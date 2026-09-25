@@ -2,6 +2,7 @@
 // to a web page (Server-Sent Events) and accepts commands from that page.
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { loadConfig, ConfigError, type WrapperConfig } from "./config.ts";
@@ -13,7 +14,11 @@ interface Envelope {
   record: PiRecord;
 }
 
-const PUBLIC_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "public");
+const ROOT_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
+const PUBLIC_DIR = join(ROOT_DIR, "public");
+// Bundled pi extension that publishes the tool registry (see pi-extension/wrapper-bridge.ts).
+const BRIDGE_EXTENSION = join(ROOT_DIR, "pi-extension", "wrapper-bridge.ts");
+const TOOLS_STATUS_KEY = "pi-wrapper:tools"; // must match wrapper-bridge.ts
 const MAX_BODY_BYTES = 1024 * 1024;
 const DIALOG_METHODS = new Set(["select", "confirm", "input", "editor"]);
 // Per-command response timeouts (ms). Long-running commands get generous limits.
@@ -30,6 +35,8 @@ class Hub {
   private clients = new Set<ServerResponse>();
   readonly pendingDialogs = new Map<string, Envelope>();
   isStreaming = false;
+  /** Latest tool registry snapshot published by the bridge extension. */
+  tools: { tools: unknown[]; active: string[] } | null = null;
   private readonly limit: number;
 
   constructor(limit: number) {
@@ -71,7 +78,7 @@ class Hub {
       Connection: "keep-alive",
     });
     const replay = [...this.history, ...this.inflight].sort((a, b) => a.seq - b.seq);
-    res.write(`event: replay\ndata: ${JSON.stringify({ events: replay, isStreaming: this.isStreaming })}\n\n`);
+    res.write(`event: replay\ndata: ${JSON.stringify({ events: replay, isStreaming: this.isStreaming, tools: this.tools })}\n\n`);
     this.clients.add(res);
     res.on("close", () => this.clients.delete(res));
   }
@@ -125,14 +132,32 @@ async function main(): Promise<void> {
     throw e;
   }
 
+  if (!existsSync(BRIDGE_EXTENSION)) {
+    console.error(`Bridge extension missing: ${BRIDGE_EXTENSION}`);
+    process.exit(2);
+  }
   const hub = new Hub(config.historyLimit);
-  const pi = new PiProcess(config.piBin, config.piArgs, config.piCwd, config.piEnv);
+  const piArgs = ["-e", BRIDGE_EXTENSION, ...config.piArgs];
+  const pi = new PiProcess(config.piBin, piArgs, config.piCwd, config.piEnv);
   const wrapperEvent = (event: string, extra: Record<string, unknown> = {}) =>
     hub.publish({ type: "wrapper", event, ...extra });
 
-  pi.on("record", (r: PiRecord) => hub.publish(r));
+  pi.on("record", (r: PiRecord) => {
+    // Intercept the bridge extension's tool-registry channel; never forward it as a status entry.
+    if (r.type === "extension_ui_request" && r.method === "setStatus" && r.statusKey === TOOLS_STATUS_KEY) {
+      try {
+        const payload = JSON.parse(String(r.statusText));
+        hub.tools = { tools: payload.tools ?? [], active: payload.active ?? [] };
+        wrapperEvent("tools", hub.tools);
+      } catch (e) {
+        wrapperEvent("stderr", { text: `Invalid tool registry payload from bridge extension: ${(e as Error).message}\n` });
+      }
+      return;
+    }
+    hub.publish(r);
+  });
   pi.on("stderr", (text: string) => wrapperEvent("stderr", { text }));
-  pi.on("start", ({ pid }) => wrapperEvent("started", { pid, cwd: config.piCwd, args: ["--mode", "rpc", ...config.piArgs], envOverrides: Object.keys(config.piEnv) }));
+  pi.on("start", ({ pid }) => wrapperEvent("started", { pid, cwd: config.piCwd, args: ["--mode", "rpc", ...piArgs], envOverrides: Object.keys(config.piEnv) }));
   pi.on("exit", ({ code, signal }) => wrapperEvent("exited", { code, signal }));
 
   const startPi = () => {
