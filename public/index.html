@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>pi wrapper</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel2: #1e222b; --border: #2a2f3a; --text: #d7dae0; --muted: #8a909c;
+    --accent: #6aa9ff; --ok: #5fcf80; --warn: #e6b450; --err: #f07178; --user: #24324a; --think: #a38bd6;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--text); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; display: flex; flex-direction: column; }
+  header { display: flex; gap: 12px; align-items: center; padding: 8px 14px; background: var(--panel); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  header h1 { font-size: 15px; margin: 0; }
+  .pill { padding: 2px 8px; border-radius: 10px; background: var(--panel2); border: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+  .pill.ok { color: var(--ok); } .pill.busy { color: var(--warn); } .pill.err { color: var(--err); }
+  header .spacer { flex: 1; }
+  button, select { background: var(--panel2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; font: inherit; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #0b1020; border-color: var(--accent); font-weight: 600; }
+  button.danger { color: var(--err); }
+  label.opt { font-size: 12px; color: var(--muted); display: flex; gap: 4px; align-items: center; }
+  #statusbar { display: flex; gap: 8px; padding: 4px 14px; background: var(--panel); border-bottom: 1px solid var(--border); font-size: 12px; color: var(--muted); flex-wrap: wrap; min-height: 0; }
+  #statusbar:empty { display: none; }
+  #widgets:empty { display: none; }
+  #widgets { padding: 6px 14px; border-bottom: 1px solid var(--border); font: 12px/1.4 ui-monospace, Menlo, monospace; white-space: pre-wrap; color: var(--muted); }
+  main { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+  .item { border: 1px solid var(--border); border-radius: 8px; background: var(--panel); padding: 8px 10px; max-width: 100%; }
+  .item .meta { font-size: 11px; color: var(--muted); margin-bottom: 4px; display: flex; gap: 8px; }
+  .item.user { background: var(--user); align-self: flex-end; max-width: 80%; }
+  .item.sys { background: transparent; border: none; padding: 0 4px; color: var(--muted); font-size: 12px; }
+  .item.notify-info { border-left: 3px solid var(--accent); }
+  .item.notify-warning { border-left: 3px solid var(--warn); }
+  .item.notify-error, .item.error { border-left: 3px solid var(--err); }
+  .text { white-space: pre-wrap; word-wrap: break-word; }
+  .thinking { white-space: pre-wrap; color: var(--think); font-style: italic; font-size: 13px; border-left: 2px solid var(--think); padding-left: 8px; margin: 4px 0; }
+  pre { margin: 4px 0 0; padding: 6px 8px; background: #0b0d11; border-radius: 6px; overflow-x: auto; font: 12px/1.4 ui-monospace, Menlo, monospace; white-space: pre-wrap; word-break: break-word; max-height: 360px; overflow-y: auto; }
+  details summary { cursor: pointer; }
+  .tool .name { color: var(--accent); font-weight: 600; }
+  .tool.ok .state { color: var(--ok); } .tool.fail .state { color: var(--err); } .tool.run .state { color: var(--warn); }
+  /* Structured blocks: Tool Invocation / LLM Call */
+  .block { border: 1px solid var(--border); border-radius: 8px; background: var(--panel); overflow: hidden; }
+  .block.b-tool { border-left: 4px solid #c792ea; }
+  .block.b-llm { border-left: 4px solid var(--accent); }
+  .block.b-err { border-left-color: var(--err); }
+  .block .b-head { display: flex; align-items: center; gap: 10px; padding: 6px 10px; background: var(--panel2); border-bottom: 1px solid var(--border); }
+  .block .b-title { font-weight: 700; letter-spacing: .3px; }
+  .block.b-tool .b-title { color: #c792ea; } .block.b-llm .b-title { color: var(--accent); }
+  .block .b-badge { font-size: 11px; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--border); }
+  .b-badge.run { color: var(--warn); } .b-badge.ok { color: var(--ok); } .b-badge.err { color: var(--err); }
+  .block .b-ts { margin-left: auto; font-size: 11px; color: var(--muted); }
+  .block .b-body { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 6px 12px; padding: 8px 10px; }
+  .block .b-label { color: var(--muted); font-weight: 600; font-size: 12px; padding-top: 2px; }
+  .block .b-value { min-width: 0; }
+  .block .b-value pre { margin: 0; }
+  .block .b-sub { font-size: 11px; color: var(--muted); margin: 4px 0 2px; text-transform: uppercase; letter-spacing: .4px; }
+  .block .b-sub:first-child { margin-top: 0; }
+  .block .b-call { color: #c792ea; font-size: 13px; margin-top: 4px; }
+  footer { border-top: 1px solid var(--border); background: var(--panel); padding: 10px 14px; display: flex; gap: 8px; align-items: flex-end; }
+  footer textarea { flex: 1; resize: vertical; min-height: 44px; max-height: 40vh; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 8px; font: 14px/1.4 ui-monospace, Menlo, monospace; }
+  footer textarea:focus { outline: none; border-color: var(--accent); }
+  footer .col { display: flex; flex-direction: column; gap: 6px; }
+  .hint { font-size: 11px; color: var(--muted); }
+  #toasts { position: fixed; top: 60px; right: 14px; display: flex; flex-direction: column; gap: 6px; z-index: 20; }
+  .toast { background: var(--panel2); border: 1px solid var(--border); border-left: 3px solid var(--accent); padding: 8px 12px; border-radius: 6px; max-width: 360px; box-shadow: 0 4px 14px #0008; }
+  .toast.warning { border-left-color: var(--warn); } .toast.error { border-left-color: var(--err); }
+  #dialog { position: fixed; inset: 0; background: #000a; display: none; align-items: center; justify-content: center; z-index: 30; }
+  #dialog.open { display: flex; }
+  #dialog .box { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; width: min(560px, 92vw); display: flex; flex-direction: column; gap: 10px; }
+  #dialog .opts { display: flex; flex-direction: column; gap: 6px; }
+  #dialog textarea, #dialog input { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 8px; font: inherit; width: 100%; }
+  #dialog .row { display: flex; gap: 8px; justify-content: flex-end; }
+</style>
+</head>
+<body>
+<header>
+  <h1>π wrapper</h1>
+  <span id="conn" class="pill">connecting…</span>
+  <span id="proc" class="pill">pi: ?</span>
+  <span id="run" class="pill">idle</span>
+  <span id="model" class="pill">model: ?</span>
+  <span class="spacer"></span>
+  <label class="opt"><input type="checkbox" id="optThinking" checked /> thinking</label>
+  <label class="opt"><input type="checkbox" id="optLifecycle" /> lifecycle</label>
+  <label class="opt"><input type="checkbox" id="optScroll" checked /> autoscroll</label>
+  <button id="btnAbort" class="danger" title="Abort the current run">Abort</button>
+  <button id="btnNew" title="Start a new pi session">New session</button>
+  <button id="btnRestart" title="Restart the pi process">Restart pi</button>
+  <button id="btnClear" title="Clear this view (does not affect pi)">Clear view</button>
+</header>
+<div id="statusbar"></div>
+<div id="widgets"></div>
+<main id="feed"></main>
+<footer>
+  <textarea id="input" placeholder="Message pi…  (Enter = send, Shift+Enter = newline, !cmd = run bash, !!cmd = bash excluded from context, /name = command/skill/template)"></textarea>
+  <div class="col">
+    <select id="behavior" title="Delivery while pi is busy">
+      <option value="steer">steer (while busy)</option>
+      <option value="followUp">follow-up (while busy)</option>
+    </select>
+    <button id="btnSend" class="primary">Send</button>
+  </div>
+</footer>
+<div id="toasts"></div>
+<div id="dialog"><div class="box" id="dialogBox"></div></div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const feed = $("feed");
+  const state = { streaming: false, messages: new Map(), tools: new Map(), bash: new Map(), currentAssistant: null, statuses: new Map(), widgets: new Map(), resolvedDialogs: new Set(), dialogQueue: [], openDialog: null };
+
+  // ---------- helpers ----------
+  function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function fmtTime(ts) { return new Date(ts).toLocaleTimeString(); }
+  function atBottom() { return feed.scrollHeight - feed.scrollTop - feed.clientHeight < 80; }
+  function scroll(force) { if ($("optScroll").checked || force) feed.scrollTop = feed.scrollHeight; }
+  function add(node, ts, label) {
+    if (label !== undefined) { const m = el("div", "meta"); m.append(el("span", null, label), el("span", null, fmtTime(ts))); node.prepend(m); }
+    const stick = atBottom(); feed.append(node); if (stick) scroll();
+    return node;
+  }
+  function sys(text, ts, cls) { const n = el("div", "item sys" + (cls ? " " + cls : ""), `${fmtTime(ts)} · ${text}`); if (cls === "lifecycle") n.dataset.lifecycle = "1"; applyVisibility(n); return add(n); }
+  function toast(text, kind) {
+    const t = el("div", "toast " + (kind || "info"), text); $("toasts").append(t);
+    setTimeout(() => t.remove(), 6000);
+  }
+  function contentText(content) {
+    if (typeof content === "string") return content;
+    if (!Array.isArray(content)) return "";
+    return content.map((c) => c.type === "text" ? c.text : c.type === "image" ? "[image]" : "").join("");
+  }
+  function jsonPre(obj) { return el("pre", null, typeof obj === "string" ? obj : JSON.stringify(obj, null, 2)); }
+  function applyVisibility(n) {
+    if (n.dataset.lifecycle) n.style.display = $("optLifecycle").checked ? "" : "none";
+    n.querySelectorAll?.(".thinking").forEach((t) => t.style.display = $("optThinking").checked ? "" : "none");
+    if (n.classList?.contains("thinking")) n.style.display = $("optThinking").checked ? "" : "none";
+  }
+  function setRun(streaming) {
+    state.streaming = streaming;
+    const r = $("run"); r.textContent = streaming ? "working…" : "idle"; r.className = "pill " + (streaming ? "busy" : "ok");
+  }
+  function setProc(running, text) { const p = $("proc"); p.textContent = "pi: " + text; p.className = "pill " + (running ? "ok" : "err"); }
+
+  // ---------- structured blocks ----------
+  function fmtDur(ms) {
+    if (ms == null || ms < 0) return "–";
+    if (ms < 1000) return `${Math.round(ms)} ms`;
+    if (ms < 60000) return `${(ms / 1000).toFixed(2)} s`;
+    return `${Math.floor(ms / 60000)}m ${((ms % 60000) / 1000).toFixed(1)}s`;
+  }
+  const timers = new Set(); // live "running…" execution-time counters
+  setInterval(() => { for (const t of timers) t.el.textContent = `running… ${fmtDur(Date.now() - t.start)}`; }, 200);
+
+  function makeBlock(kind, title, ts) {
+    const node = el("div", "block " + (kind === "tool" ? "b-tool" : "b-llm"));
+    const head = el("div", "b-head");
+    const badge = el("span", "b-badge run", "running");
+    head.append(el("span", "b-title", title), badge, el("span", "b-ts", fmtTime(ts)));
+    const body = el("div", "b-body");
+    node.append(head, body);
+    const fields = {};
+    const blk = {
+      node, badge, fields, start: ts, timer: null,
+      field(label) {
+        body.append(el("div", "b-label", label + ":"));
+        const v = el("div", "b-value"); body.append(v); fields[label] = v; return v;
+      },
+      startTimer() { this.timer = { el: fields["Execution Time"], start: this.start }; timers.add(this.timer); this.timer.el.textContent = "running…"; },
+      finish(ts, status, label) {
+        if (this.timer) timers.delete(this.timer);
+        fields["Execution Time"].textContent = fmtDur(ts - this.start);
+        badge.className = "b-badge " + status; badge.textContent = label;
+        if (status === "err") node.classList.add("b-err");
+      },
+    };
+    return blk;
+  }
+  function valuePre(v, text) { v.textContent = ""; const pre = el("pre", null, text); v.append(pre); return pre; }
+
+  // ---- Tool Invocation ----
+  function toolStart(r, ts) {
+    const b = makeBlock("tool", "Tool Invocation", ts);
+    b.field("Tool Name").append(el("span", "name", r.toolName));
+    valuePre(b.field("Input Data"), JSON.stringify(r.args ?? {}, null, 2));
+    b.field("Result").append(el("span", "hint", "(waiting…)"));
+    b.field("Execution Time"); b.startTimer();
+    add(b.node); state.tools.set(r.toolCallId, b);
+    return b;
+  }
+  function resultText(result) {
+    if (result == null) return "";
+    const t = contentText(result.content);
+    return t || JSON.stringify(result, null, 2);
+  }
+
+  // ---- LLM Call ----
+  // "Message" = what is new in the context for this call: the user prompt on the first
+  // call of a run, the tool results on follow-up calls (plus steering/custom messages).
+  const llm = { pendingStart: null, inputs: [] };
+  function llmInputFrom(m) {
+    if (m.role === "user") return { label: "user", text: contentText(m.content) };
+    if (m.role === "toolResult") return { label: `tool result · ${m.toolName}${m.isError ? " (error)" : ""}`, text: contentText(m.content) };
+    if (m.role === "custom") return { label: `custom · ${m.customType || ""}`, text: contentText(m.content) };
+    if (m.role === "bashExecution") return { label: "bash (user)", text: `$ ${m.command}\n${m.output || ""}` };
+    return null;
+  }
+  function llmStart(ts) {
+    const start = llm.pendingStart != null ? Math.min(llm.pendingStart, ts) : ts;
+    const b = makeBlock("llm", "LLM Call", start);
+    const msgV = b.field("Message");
+    if (!llm.inputs.length) msgV.append(el("span", "hint", "(no new input — continuation of the conversation context)"));
+    for (const inp of llm.inputs) { msgV.append(el("div", "b-sub", inp.label)); msgV.append(el("pre", null, inp.text)); }
+    const resp = b.field("Response");
+    b.respBox = el("div"); resp.append(b.respBox);
+    b.parts = new Map();
+    b.field("Execution Time"); b.startTimer();
+    llm.inputs = []; llm.pendingStart = null;
+    add(b.node);
+    state.currentAssistant = b;
+    return b;
+  }
+  function part(b, index, kind) {
+    let p = b.parts.get(index);
+    if (!p) {
+      p = { kind, node: el("div", kind === "thinking" ? "thinking" : kind === "tool" ? "b-call" : "text"), text: "" };
+      applyVisibility(p.node);
+      b.parts.set(index, p); b.respBox.append(p.node);
+    }
+    return p;
+  }
+  function llmFinish(b, message, ts) {
+    b.respBox.textContent = ""; b.parts.clear();
+    (message.content || []).forEach((c) => {
+      if (c.type === "text" && c.text) b.respBox.append(el("div", "text", c.text));
+      else if (c.type === "thinking" && c.thinking) { const t = el("div", "thinking", c.thinking); applyVisibility(t); b.respBox.append(t); }
+      else if (c.type === "toolCall") {
+        b.respBox.append(el("div", "b-call", `→ tool call: ${c.name}`));
+        b.respBox.append(el("pre", null, JSON.stringify(c.arguments ?? {}, null, 2)));
+      }
+    });
+    const failed = message.stopReason === "error" || message.stopReason === "aborted";
+    if (failed) b.respBox.append(el("div", "text", `⚠ ${message.stopReason}: ${message.errorMessage || ""}`));
+    if (!b.respBox.childNodes.length) b.respBox.append(el("span", "hint", "(empty response)"));
+    const u = message.usage;
+    if (u && u.totalTokens) {
+      b.field("Tokens").textContent = `in ${u.input}` + (u.cacheRead ? ` (cache read ${u.cacheRead})` : "") + ` · out ${u.output}` + (u.cost && u.cost.total ? ` · $${u.cost.total.toFixed(4)}` : "");
+    }
+    if (message.model) b.field("Model").textContent = `${message.provider}/${message.model}`;
+    b.finish(ts, failed ? "err" : "ok", failed ? message.stopReason : `done · ${message.stopReason}`);
+    state.currentAssistant = null;
+  }
+  function interruptOpenBlocks(ts) {
+    for (const [, b] of state.tools) { b.fields["Result"].textContent = "(interrupted — no result received)"; b.finish(ts, "err", "interrupted"); }
+    state.tools.clear();
+    if (state.currentAssistant) { state.currentAssistant.finish(ts, "err", "interrupted"); state.currentAssistant = null; }
+  }
+
+  // ---------- record handlers ----------
+  function handle(env) {
+    const r = env.record, ts = env.ts;
+    switch (r.type) {
+      case "wrapper": return handleWrapper(r, ts);
+      case "response": return handleResponse(r, ts);
+      case "extension_ui_request": return handleUi(r, ts);
+      case "agent_start": setRun(true); return sys("agent started", ts, "lifecycle");
+      case "agent_end": return sys("agent run ended" + (r.willRetry ? " (will retry)" : ""), ts, "lifecycle");
+      case "agent_settled": setRun(false); interruptOpenBlocks(ts); llm.inputs = []; llm.pendingStart = null; return sys("✓ agent settled", ts);
+      case "turn_start": llm.pendingStart = Math.max(llm.pendingStart ?? 0, ts); return sys("turn start", ts, "lifecycle");
+      case "turn_end": return sys("turn end", ts, "lifecycle");
+      case "message_start": {
+        const m = r.message || {};
+        if (m.role === "user") { const n = el("div", "item user"); n.append(el("div", "text", contentText(m.content))); add(n, ts, "you"); scroll(true); }
+        else if (m.role === "assistant") llmStart(ts);
+        return;
+      }
+      case "message_update": {
+        const ev = r.assistantMessageEvent || {};
+        const b = state.currentAssistant || llmStart(ts);
+        const stick = atBottom();
+        if (ev.type === "text_delta") { const p = part(b, ev.contentIndex, "text"); p.text += ev.delta; p.node.textContent = p.text; }
+        else if (ev.type === "thinking_delta") { const p = part(b, ev.contentIndex, "thinking"); p.text += ev.delta; p.node.textContent = p.text; }
+        else if (ev.type === "text_end") { const p = part(b, ev.contentIndex, "text"); p.node.textContent = ev.content; }
+        else if (ev.type === "thinking_end") { const p = part(b, ev.contentIndex, "thinking"); p.node.textContent = ev.content; }
+        else if (ev.type === "toolcall_start") { const p = part(b, ev.contentIndex, "tool"); p.node.textContent = `→ tool call: ${ev.toolName}…`; }
+        else if (ev.type === "toolcall_end" && ev.toolCall) { const p = part(b, ev.contentIndex, "tool"); p.node.textContent = `→ tool call: ${ev.toolCall.name}`; }
+        if (stick) scroll();
+        return;
+      }
+      case "message_end": {
+        const m = r.message || {};
+        if (m.role === "assistant") { llmFinish(state.currentAssistant || llmStart(ts), m, ts); return; }
+        const inp = llmInputFrom(m);
+        if (inp) { llm.inputs.push(inp); llm.pendingStart = Math.max(llm.pendingStart ?? 0, ts); }
+        if (m.role === "custom" && m.display !== false) { const n = el("div", "item"); n.append(el("div", "text", contentText(m.content))); add(n, ts, `message · ${m.customType || m.role}`); }
+        return;
+      }
+      case "tool_execution_start": toolStart(r, ts); return;
+      case "tool_execution_update": {
+        const b = state.tools.get(r.toolCallId); if (!b) return;
+        const txt = contentText(r.partialResult && r.partialResult.content);
+        if (txt) valuePre(b.fields["Result"], txt);
+        return;
+      }
+      case "tool_execution_end": {
+        const b = state.tools.get(r.toolCallId) || toolStart(r, ts);
+        valuePre(b.fields["Result"], resultText(r.result) || "(no output)");
+        b.finish(ts, r.isError ? "err" : "ok", r.isError ? "error" : "success");
+        state.tools.delete(r.toolCallId);
+        return;
+      }
+      case "bash_execution_update": {
+        let b = state.bash.get(r.id);
+        if (!b) { const n = el("div", "item tool run"); const out = el("pre", null, ""); n.append(el("span", "name", "bash (user)"), out); add(n, ts, "bash"); b = { n, out }; state.bash.set(r.id, b); }
+        b.out.textContent += r.delta; return;
+      }
+      case "queue_update": {
+        const s = (r.steering || []).length, f = (r.followUp || []).length;
+        return sys(`queue: ${s} steering, ${f} follow-up`, ts);
+      }
+      case "compaction_start": return sys(`compaction started (${r.reason})`, ts);
+      case "compaction_end": return sys(r.aborted ? "compaction aborted" : r.errorMessage ? `compaction failed: ${r.errorMessage}` : `compaction done (${r.result?.tokensBefore} → ~${r.result?.estimatedTokensAfter} tokens)`, ts, r.errorMessage ? "error" : undefined);
+      case "auto_retry_start": return sys(`retry ${r.attempt}/${r.maxAttempts} in ${r.delayMs}ms: ${r.errorMessage}`, ts);
+      case "auto_retry_end": return sys(r.success ? `retry succeeded (attempt ${r.attempt})` : `retry failed: ${r.finalError}`, ts);
+      case "session_info_changed": return sys(`session name: ${r.name ?? "(cleared)"}`, ts);
+      case "thinking_level_changed": return sys(`thinking level: ${r.level}`, ts);
+      case "extension_error": { const n = el("div", "item error"); n.append(el("div", "text", `${r.event}: ${r.error}`), el("div", "hint", r.extensionPath)); return add(n, ts, "extension error"); }
+      default: {
+        const n = el("div", "item sys"); n.dataset.lifecycle = "1"; applyVisibility(n);
+        const d = el("details"); d.append(el("summary", null, `${fmtTime(ts)} · ${r.type}`), jsonPre(r)); n.append(d); return add(n);
+      }
+    }
+  }
+
+  function handleWrapper(r, ts) {
+    switch (r.event) {
+      case "started": setProc(true, `running (pid ${r.pid})`); return sys(`pi started in ${r.cwd} · pi ${r.args.join(" ")}` + (r.envOverrides && r.envOverrides.length ? ` · env overrides: ${r.envOverrides.join(", ")}` : ""), ts);
+      case "exited": setProc(false, "stopped"); setRun(false); interruptOpenBlocks(ts); return sys(`pi exited (code ${r.code}${r.signal ? ", signal " + r.signal : ""})`, ts, "error");
+      case "stderr": { const n = el("div", "item sys"); n.dataset.lifecycle = "1"; n.append(el("pre", null, r.text)); applyVisibility(n); return add(n); }
+      case "user_command": if (r.command === "bash") { const n = el("div", "item user"); n.append(el("div", "text", r.text)); add(n, ts, "you · bash"); scroll(true); } else if (r.behavior) sys(`queued as ${r.behavior}: ${r.text}`, ts); return;
+      case "ui_resolved": state.resolvedDialogs.add(r.id); if (state.openDialog === r.id) closeDialog(); state.dialogQueue = state.dialogQueue.filter((d) => d.id !== r.id); return;
+    }
+  }
+
+  function handleResponse(r, ts) {
+    if (!r.success) { const n = el("div", "item error"); n.append(el("div", "text", `${r.command} failed: ${r.error}`)); return add(n, ts, "error"); }
+    if (r.command === "get_state" && r.data) {
+      const m = r.data.model; $("model").textContent = "model: " + (m ? `${m.provider}/${m.id}` : "none") + (r.data.thinkingLevel ? ` · ${r.data.thinkingLevel}` : "");
+      setRun(!!r.data.isStreaming);
+    }
+    if (r.command === "bash" && r.data) {
+      const b = state.bash.get(r.id);
+      const out = r.data.output + (r.data.truncated ? `\n[truncated, full output: ${r.data.fullOutputPath}]` : "");
+      if (b) { b.n.className = "item tool " + (r.data.exitCode === 0 ? "ok" : "fail"); b.out.textContent = out; }
+      else { const n = el("div", "item tool " + (r.data.exitCode === 0 ? "ok" : "fail")); n.append(el("span", "name", "bash (user)"), jsonPre(out)); add(n, ts, "bash"); }
+      sys(`exit code ${r.data.exitCode}${r.data.cancelled ? " (cancelled)" : ""}`, ts);
+    }
+    if (r.command === "new_session" && r.data && !r.data.cancelled) sys("── new session ──", ts);
+  }
+
+  function handleUi(r, ts) {
+    switch (r.method) {
+      case "notify": {
+        const kind = r.notifyType || "info";
+        const n = el("div", "item notify-" + kind); n.append(el("div", "text", r.message)); add(n, ts, `notification · ${kind}`);
+        if (!replaying) toast(r.message, kind); return;
+      }
+      case "setStatus": if (r.statusText == null) state.statuses.delete(r.statusKey); else state.statuses.set(r.statusKey, r.statusText); return renderStatus();
+      case "setWidget": if (!r.widgetLines) state.widgets.delete(r.widgetKey); else state.widgets.set(r.widgetKey, r.widgetLines); return renderWidgets();
+      case "setTitle": document.title = r.title; return;
+      case "set_editor_text": $("input").value = r.text; return;
+      case "select": case "confirm": case "input": case "editor":
+        if (state.resolvedDialogs.has(r.id)) return;
+        sys(`extension asks: ${r.title}`, ts);
+        state.dialogQueue.push(r); return nextDialog();
+      default: return sys(`extension ui: ${r.method}`, ts, "lifecycle");
+    }
+  }
+  function renderStatus() { const s = $("statusbar"); s.textContent = ""; for (const [k, v] of state.statuses) s.append(el("span", "pill", `${k}: ${v}`)); }
+  function renderWidgets() { const w = $("widgets"); w.textContent = ""; for (const [, lines] of state.widgets) w.append(el("div", null, lines.join("\n"))); }
+
+  // ---------- extension dialogs ----------
+  function nextDialog() {
+    if (state.openDialog || replaying) return;
+    const r = state.dialogQueue.shift(); if (!r) return;
+    if (state.resolvedDialogs.has(r.id)) return nextDialog();
+    state.openDialog = r.id;
+    const box = $("dialogBox"); box.textContent = "";
+    box.append(el("strong", null, r.title || "pi asks"));
+    if (r.message) box.append(el("div", "text", r.message));
+    const row = el("div", "row");
+    const cancel = el("button", null, "Cancel"); cancel.onclick = () => answer(r.id, { cancelled: true });
+    if (r.method === "select") {
+      const opts = el("div", "opts");
+      (r.options || []).forEach((o) => { const b = el("button", null, o); b.onclick = () => answer(r.id, { value: o }); opts.append(b); });
+      box.append(opts); row.append(cancel);
+    } else if (r.method === "confirm") {
+      const no = el("button", null, "No"); no.onclick = () => answer(r.id, { confirmed: false });
+      const yes = el("button", "primary", "Yes"); yes.onclick = () => answer(r.id, { confirmed: true });
+      row.append(cancel, no, yes);
+    } else {
+      const field = r.method === "editor" ? el("textarea") : el("input");
+      if (r.method === "editor") { field.rows = 12; field.value = r.prefill || ""; } else field.placeholder = r.placeholder || "";
+      const ok = el("button", "primary", "OK"); ok.onclick = () => answer(r.id, { value: field.value });
+      if (r.method === "input") field.onkeydown = (e) => { if (e.key === "Enter") ok.click(); };
+      box.append(field); row.append(cancel, ok); setTimeout(() => field.focus(), 0);
+    }
+    if (r.timeout) box.append(el("div", "hint", `auto-resolves in ${Math.round(r.timeout / 1000)}s`));
+    box.append(row); $("dialog").classList.add("open");
+  }
+  function closeDialog() { state.openDialog = null; $("dialog").classList.remove("open"); setTimeout(nextDialog, 0); }
+  async function answer(id, payload) {
+    closeDialog();
+    const res = await post("/api/ui-response", { id, ...payload });
+    if (!res.ok) toast(res.body.error || "failed to answer dialog", "warning");
+  }
+
+  // ---------- server connection ----------
+  let replaying = false;
+  function connect() {
+    const es = new EventSource("/events");
+    es.addEventListener("replay", (e) => {
+      const data = JSON.parse(e.data);
+      feed.textContent = ""; state.currentAssistant = null; state.tools.clear(); timers.clear(); llm.inputs = []; llm.pendingStart = null; state.bash.clear(); state.statuses.clear(); state.widgets.clear(); state.dialogQueue = [];
+      replaying = true;
+      for (const env of data.events) { try { handle(env); } catch (err) { console.error(err, env); } }
+      replaying = false;
+      renderStatus(); renderWidgets(); setRun(data.isStreaming); scroll(true); nextDialog();
+      const c = $("conn"); c.textContent = "connected"; c.className = "pill ok";
+    });
+    es.onmessage = (e) => { try { handle(JSON.parse(e.data)); } catch (err) { console.error(err, e.data); } };
+    es.onerror = () => { const c = $("conn"); c.textContent = "disconnected – retrying"; c.className = "pill err"; };
+  }
+
+  async function post(path, body) {
+    try {
+      const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+      return { ok: r.ok, body: await r.json().catch(() => ({})) };
+    } catch (err) { return { ok: false, body: { error: String(err) } }; }
+  }
+
+  async function send() {
+    const input = $("input"); const text = input.value.trim(); if (!text) return;
+    input.value = "";
+    const res = await post("/api/command", { text, behavior: $("behavior").value });
+    if (!res.ok) { toast(res.body.error || "command failed", "error"); if (!input.value) input.value = text; }
+  }
+
+  $("btnSend").onclick = send;
+  $("input").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); } });
+  $("btnAbort").onclick = async () => { const r = await post("/api/rpc", { type: "abort" }); if (!r.ok) toast(r.body.error, "error"); };
+  $("btnNew").onclick = async () => { if (!confirm("Start a new pi session?")) return; const r = await post("/api/rpc", { type: "new_session" }); if (!r.ok) toast(r.body.error, "error"); else post("/api/rpc", { type: "get_state" }); };
+  $("btnRestart").onclick = async () => { if (!confirm("Restart the pi process?")) return; const r = await post("/api/restart"); if (!r.ok) toast(r.body.error, "error"); };
+  $("btnClear").onclick = () => { feed.textContent = ""; };
+  ["optThinking", "optLifecycle"].forEach((id) => $(id).onchange = () => feed.querySelectorAll(".item, .thinking").forEach(applyVisibility));
+  connect();
+  $("input").focus();
+})();
+</script>
+</body>
+</html>

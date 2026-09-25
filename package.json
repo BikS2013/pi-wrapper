@@ -1,0 +1,12 @@
+{
+  "name": "pi-wrapper",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Node web wrapper for the pi coding agent: streams pi session notifications to a web page and accepts commands from it.",
+  "type": "module",
+  "engines": { "node": ">=22.18" },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/server.ts",
+    "test": "node --env-file-if-exists=.env test_scripts/smoke-test.ts"
+  }
+}
